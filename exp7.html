@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>时域波束形成与空间信号处理原理演示</title>
+    <!-- 引入强大的科学绘图库 Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #e74c3c;
+            --bg-color: #ecf0f1;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .slide {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            padding: 30px;
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        h1, h2, h3 { color: var(--primary-color); border-bottom: 2px solid var(--primary-color); padding-bottom: 10px;}
+        p { line-height: 1.6; font-size: 1.1em; }
+        .highlight { color: var(--accent-color); font-weight: bold; }
+        
+        /* 布局控制 */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+        
+        /* 控件样式 */
+        .controls { background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 20px;}
+        input[type="range"] { width: 60%; cursor: pointer; }
+        .slider-value { font-size: 1.5em; font-weight: bold; color: var(--accent-color); }
+        
+        .plot-container { width: 100%; height: 400px; }
+        .polar-container { width: 100%; height: 500px; }
+    </style>
+</head>
+<body>
+
+    <!-- ================= 模块1：时空互易性 ================= -->
+    <div class="slide" id="slide1">
+        <h2>1. 核心数学基础：空间与时间的“互易性”</h2>
+        <p>我们常说空间信号处理和时间信号处理使用的算法十分相似（比如这里的波束扫描和时域的匹配滤波）。其物理根源在于平面波的数学表达式：
+        <strong>s(t, x) = A · sin(ωt - kx - φ)</strong></p>
+        <p>这个二元函数在时间轴 <span class="highlight">t</span> 和空间轴 <span class="highlight">x</span> 上的截面图像是完全相似的。时间频率 ω 对应空间频率 k（波数）。这解释了为什么我们可以顺理成章地将成熟的**时域FIR滤波器技术（整数/小数时延）**直接平移到**空间域的阵列波束合成**中。</p>
+        
+        <div class="grid-2">
+            <div id="plot-time" class="plot-container"></div>
+            <div id="plot-space" class="plot-container"></div>
+        </div>
+    </div>
+
+    <!-- ================= 模块2：延时求和的物理直觉 ================= -->
+    <div class="slide" id="slide2">
+        <h2>2. 物理直觉：波束扫描（时延补偿）与相位对齐</h2>
+        <p><strong>实验场景：</strong>8阵元线阵，阵间距 d=1.5m，单频CW信号 f=200Hz。空间中存在一个真实入射角为 <span class="highlight">104.5°</span> 的信号。</p>
+        <p><strong>过程：</strong>接收端由于存在波程差，8个通道的信号产生固有相位差（表现为时延）。当我们在DSP中扫描不同的角度时，实际上是在**补偿时延**。拖动下方滑块，观察补偿不同角度时，波形是如何对齐的，合成能量是如何变化的！</p>
+        
+        <div class="controls">
+            <label style="font-size: 1.2em;">波束扫描补偿角度 (Steering Angle): </label>
+            <input type="range" id="steer-slider" min="0" max="180" step="0.5" value="60">
+            <span class="slider-value" id="steer-val">60.0°</span>
+        </div>
+
+        <div class="grid-3">
+            <div>
+                <h3 style="font-size:1.1em; text-align:center;">① 各通道补偿后波形 (相加前)</h3>
+                <div id="plot-alignment" class="plot-container"></div>
+            </div>
+            <div>
+                <h3 style="font-size:1.1em; text-align:center;">② 阵列叠加输出波形 (能量=振幅²)</h3>
+                <div id="plot-sum" class="plot-container"></div>
+            </div>
+            <div>
+                <h3 style="font-size:1.1em; text-align:center;">③ 能量在DOA空间谱上的联动</h3>
+                <div id="plot-polar" class="polar-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= 模块3：DOA与指向性函数的本质区别 ================= -->
+    <div class="slide" id="slide3">
+        <h2>3. 深度解析：DOA谱 与 波束指向性 的不同视角</h2>
+        <p>虽然常规波束形成（CBF）算出来的阵列空间相关函数（DOA谱）和波束指向性函数（Beampattern）在图表上长得很像，但其**物理视角**完全不同：</p>
+        <ul style="font-size: 1.1em; line-height:1.6;">
+            <li><strong>左图 - DOA（空间相关函数）：</strong>信号真实存在于 <span class="highlight">104.5°</span>。横坐标是我们DSP主动**扫描的角度**。当我们扫到60°时，得到的是一个较低的相关能量点（黑点）。</li>
+            <li><strong>右图 - 波束指向性：</strong>我们在DSP中把阵列法线“强行”**指向 60°**。横坐标是空间中可能的**信号真实到达角**。此时阵列在60°增益最大，而来自104.5°的真实信号被抑制到了旁瓣（黑点处）。</li>
+        </ul>
+
+        <div class="controls">
+            <label style="font-size: 1.2em;">改变当前的扫描/指向角度: </label>
+            <input type="range" id="view-slider" min="0" max="180" step="0.5" value="60">
+            <span class="slider-value" id="view-val">60.0°</span>
+        </div>
+
+        <div class="grid-2">
+            <div id="plot-doa" class="plot-container"></div>
+            <div id="plot-beam" class="plot-container"></div>
+        </div>
+    </div>
+
+    <script>
+        // ================= 物理参数定义 =================
+        const f = 200;           // 频率 200Hz
+        const c = 1500;          // 声速 1500m/s
+        const lambda = c / f;    // 波长 7.5m
+        const d = 1.5;           // 阵元间距 1.5m
+        const M = 8;             // 阵元数
+        const true_doa = 104.4775; // 真实入射角
+
+        // 通用数组生成函数
+        function linspace(start, stop, num) {
+            const arr = [];
+            const step = (stop - start) / (num - 1);
+            for (let i = 0; i < num; i++) arr.push(start + step * i);
+            return arr;
+        }
+
+        // 计算常规波束形成能量/指向性增益 (Sinc 形式)
+        // 角度输入为度
+        function calcArrayFactor(theta_in_deg, theta_steer_deg) {
+            const th_in = theta_in_deg * Math.PI / 180;
+            const th_st = theta_steer_deg * Math.PI / 180;
+            const arg = Math.PI * (d / lambda) * (Math.cos(th_in) - Math.cos(th_st));
+            if (Math.abs(arg) < 1e-6) return 1.0;
+            return Math.sin(M * arg) / (M * Math.sin(arg));
+        }
+
+        // ================= 模块1：互易性绘图 =================
+        const t_arr = linspace(0, 0.02, 200); // 20ms
+        const x_arr = linspace(0, 30, 200);   // 30m
+        const omega = 2 * Math.PI * f;
+        const k_space = 2 * Math.PI / lambda;
+
+        Plotly.newPlot('plot-time', [{
+            x: t_arr, y: t_arr.map(t => Math.sin(omega * t)), type: 'scatter', line: {color: '#2980b9'}
+        }], {
+            title: '固定空间x=0，观察随时间t变化的截面',
+            xaxis: {title: '时间 t (s)'}, yaxis: {title: '振幅'}
+        });
+
+        Plotly.newPlot('plot-space', [{
+            x: x_arr, y: x_arr.map(x => Math.sin(-k_space * x)), type: 'scatter', line: {color: '#c0392b'}
+        }], {
+            title: '固定时间t=0，观察随空间x变化的截面',
+            xaxis: {title: '空间位置 x (m)'}, yaxis: {title: '振幅'}
+        });
+
+        // ================= 模块2：延时求和动态模拟 =================
+        const t_sim = linspace(0, 0.015, 300); // 用于波形的较短时间窗口
+        
+        function updateSimulation(steer_deg) {
+            let traces_aligned = [];
+            let sum_wave = new Array(t_sim.length).fill(0);
+            
+            for(let n = 0; n < M; n++) {
+                // 物理固有延迟：tau_true = n * d * cos(true_doa) / c
+                // DSP补偿延迟：tau_comp = n * d * cos(steer_deg) / c
+                // 剩余相位差带来的等效时间差：
+                let dt = (n * d / c) * (Math.cos(true_doa * Math.PI/180) - Math.cos(steer_deg * Math.PI/180));
+                
+                let y_n = t_sim.map(t => Math.sin(omega * (t - dt)));
+                
+                // 为了显示清楚，给8个通道加上不同的Y轴偏移量
+                traces_aligned.push({
+                    x: t_sim, y: y_n.map(v => v + n*2.5), 
+                    mode: 'lines', name: `Ch ${n+1}`, line: {width: 1.5}
+                });
+
+                for(let i=0; i<t_sim.length; i++) sum_wave[i] += y_n[i] / M;
+            }
+
+            // 更新左图：对齐波形
+            Plotly.react('plot-alignment', traces_aligned, {
+                title: `DSP按 ${steer_deg}° 补偿后的各通道波形`,
+                xaxis: {title: '时间', showticklabels: false}, 
+                yaxis: {title: '通道', showticklabels: false},
+                showlegend: false, margin: {l: 30, r: 10, t: 40, b: 30}
+            });
+
+            // 计算当前总能量
+            let current_energy = calcArrayFactor(true_doa, steer_deg);
+            current_energy = Math.pow(Math.abs(current_energy), 2); // 能量取平方
+
+            // 更新中图：叠加波形
+            Plotly.react('plot-sum', [{
+                x: t_sim, y: sum_wave, type: 'scatter', line: {color: '#8e44ad', width: 3}, fill: 'tozeroy'
+            }], {
+                title: `叠加合成波形 (振幅反映能量)`,
+                xaxis: {title: '时间', showticklabels: false},
+                yaxis: {range: [-1.2, 1.2], title: '合成振幅'},
+                margin: {l: 40, r: 10, t: 40, b: 30}
+            });
+
+            // 更新右图：极坐标联动
+            const angles = linspace(0, 180, 181);
+            const doa_curve = angles.map(a => Math.pow(Math.abs(calcArrayFactor(true_doa, a)), 2));
+            
+            Plotly.react('plot-polar', [
+                {   // 理论DOA背景曲线
+                    r: doa_curve, theta: angles, type: 'scatterpolar', mode: 'lines',
+                    line: {color: 'rgba(52, 152, 219, 0.5)', width: 2}, name: 'DOA曲线'
+                },
+                {   // 当前游标点
+                    r: [current_energy, 0], theta: [steer_deg, 0], type: 'scatterpolar',
+                    mode: 'lines+markers', marker: {color: '#e74c3c', size: [10, 0]},
+                    line: {color: '#e74c3c', width: 3}, name: '当前扫描能量'
+                }
+            ], {
+                polar: {
+                    sector: [0, 180],
+                    radialaxis: {visible: false},
+                    angularaxis: {direction: "clockwise", rotation: 180}
+                },
+                showlegend: false, title: '空间能量谱随扫描角的联动'
+            });
+        }
+
+        // ================= 模块3：DOA与波束指向性图表 =================
+        function updatePerspective(angle_deg) {
+            const angles = linspace(0, 180, 361);
+            
+            // 1. DOA视角：信号在104.5，计算不同扫描角下的输出
+            const doa_y = angles.map(steer => 20 * Math.log10(Math.max(1e-4, Math.abs(calcArrayFactor(true_doa, steer)))));
+            const doa_point_y = 20 * Math.log10(Math.max(1e-4, Math.abs(calcArrayFactor(true_doa, angle_deg))));
+
+            Plotly.react('plot-doa', [
+                { x: angles, y: doa_y, type: 'scatter', line: {color: '#2980b9'}, name: 'DOA谱' },
+                { x: [angle_deg], y: [doa_point_y], type: 'scatter', mode: 'markers+text', 
+                  marker: {color: '#333', size: 10}, text: ['当前扫描输出能量'], textposition: 'top center', name: '扫描点' }
+            ], {
+                title: `DOA 空间谱 (真实信号固定在 ${true_doa}°)`,
+                xaxis: {title: 'DSP 扫描角度 (°)', range: [0, 180], tickvals: [0, 60, 104.5, 180]},
+                yaxis: {title: '归一化幅度 (dB)', range: [-30, 2]},
+                showlegend: false
+            });
+
+            // 2. 指向性视角：DSP指向angle_deg，计算对不同入射信号的响应
+            const beam_y = angles.map(in_ang => 20 * Math.log10(Math.max(1e-4, Math.abs(calcArrayFactor(in_ang, angle_deg)))));
+            const beam_point_y = 20 * Math.log10(Math.max(1e-4, Math.abs(calcArrayFactor(true_doa, angle_deg)))); // 互易性，值一样，但意义不同
+
+            Plotly.react('plot-beam', [
+                { x: angles, y: beam_y, type: 'scatter', line: {color: '#27ae60'}, name: '波束图案' },
+                { x: [true_doa], y: [beam_point_y], type: 'scatter', mode: 'markers+text', 
+                  marker: {color: '#333', size: 10}, text: ['104.5°信号落在旁瓣'], textposition: 'top center', name: '真实信号位置' }
+            ], {
+                title: `阵列指向性函数 (DSP 波束强行指向 ${angle_deg}°)`,
+                xaxis: {title: '空间真实入射角度 (°)', range: [0, 180], tickvals: [0, 60, 104.5, 180]},
+                yaxis: {title: '阵列空间增益 (dB)', range: [-30, 2]},
+                showlegend: false
+            });
+        }
+
+        // ================= 事件监听绑定 =================
+        document.getElementById('steer-slider').addEventListener('input', function(e) {
+            const val = parseFloat(e.target.value);
+            document.getElementById('steer-val').innerText = val.toFixed(1) + '°';
+            updateSimulation(val);
+        });
+
+        document.getElementById('view-slider').addEventListener('input', function(e) {
+            const val = parseFloat(e.target.value);
+            document.getElementById('view-val').innerText = val.toFixed(1) + '°';
+            updatePerspective(val);
+        });
+
+        // 初始化运行
+        updateSimulation(60);
+        updatePerspective(60);
+
+    </script>
+</body>
+</html>
